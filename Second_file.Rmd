@@ -1,0 +1,305 @@
+---
+title: "Final Project (Evelin)"
+author: "Evelin Garcia"
+date: "11/24/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+
+knitr::opts_chunk$set(echo = TRUE)
+library(dplyr)
+library(ggplot2)
+library(tidyverse)
+library(stringr)
+library(splitstackshape)
+library (randomForest)
+
+```
+
+**This dataset consists of the following variables:**
+
+  * `Title`: character variable of movie title
+  * `Year`: Release year of the film
+  * `Age`: Intended age group for the movie's audience (ex: 17+ means 17 year olds are the youngest               target audience)
+  * `IMDb`: IMDb rating for the movie, out of a scale of 10
+  * `Rotten Tomatoes`: Rotten Tomatoes rating for the movie, out of a scale of 100
+  * `Netflix`, `Hulu`, `Prime Video`, `Disney+`: Indicator variables that inform us about which platform the         movie is found on
+  * `Directors`: character variable listing the movie director(s)
+  * `Genres`: character variable listing the movie genres
+  * `Country`: character variable indicating which countries the movie is available on for the respective        streaming platform
+  * `Language`: character variable listing the languages in which the movie is available on the streaming       platform
+  * `Runtime`: numeric variable providing movie run-time in minutes
+  
+
+## Importing the data
+
+```{r}
+
+data <- read.csv("MoviesOnStreamingPlatforms_updated.csv")
+head(data)
+
+```
+
+
+## Data Exploration
+```{r}
+# Determine variable classes
+  lapply(data, class)
+
+```
+
+Exploring the distribution of movie releases over time
+```{r}
+# Exploring the distribution of movie releases over time 
+  data %>% ggplot(aes(x = Year)) +
+           geom_histogram(color = "black", fill = "slateblue1") +
+           scale_x_continuous(breaks=seq(0,2025,5))+
+           theme(axis.text.x = element_text(angle = 90, hjust = 1, size=9))+
+           theme(plot.title = element_text(hjust=0.5))+
+           ylab("Count") + xlab("Year of movie release") +
+           ggtitle("Distribution of movies releases over time")
+
+```
+
+Explore the distribution of movie release years by streaming platform
+```{r}
+
+# Explore the distribution of movie release years by streaming platform
+  
+  #Netflix
+    data %>% filter(Netflix == 1) %>%
+               ggplot(aes(x = Year)) +
+               geom_histogram(color = "black", fill = "firebrick1") +
+               scale_x_continuous(breaks=seq(0,2025,5))+
+               theme(axis.text.x = element_text(angle = 90, hjust = 1, size=9))+
+               theme(plot.title = element_text(hjust=0.5))+
+               ylab("Frequency") + xlab("Year of movie release") +
+               ggtitle("Distribution of movies releases over time (Netflix)")
+  #Hulu
+    data %>% filter(Hulu == 1) %>%
+               ggplot(aes(x = Year)) +
+               geom_histogram(color = "black", fill = "seagreen3") +
+               scale_x_continuous(breaks=seq(0,2025,5))+
+               theme(axis.text.x = element_text(angle = 90, hjust = 1, size=9))+
+               theme(plot.title = element_text(hjust=0.5))+
+               ylab("Frequency") + xlab("Year of movie release") +
+               ggtitle("Distribution of movies releases over time (Hulu)")
+
+  #Prime Video
+    data %>% filter(Prime.Video == 1) %>%
+               ggplot(aes(x = Year)) +
+               geom_histogram(color = "black", fill = "deepskyblue3") +
+               scale_x_continuous(breaks=seq(0,2025,5))+
+               theme(axis.text.x = element_text(angle = 90, hjust = 1, size=9))+
+               theme(plot.title = element_text(hjust=0.5))+
+               ylab("Frequency") + xlab("Year of movie release") +
+               ggtitle("Distribution of movies releases over time (Prime Video)")
+
+  #Disney+
+    data %>% filter(Disney. == 1) %>%
+               ggplot(aes(x = Year)) +
+               geom_histogram(color = "black", fill = "blue2") +
+               scale_x_continuous(breaks=seq(0,2025,5))+
+               theme(axis.text.x = element_text(angle = 90, hjust = 1, size=9))+
+               theme(plot.title = element_text(hjust=0.5))+
+               ylab("Frequency") + xlab("Year of movie release") +
+               ggtitle("Distribution of movies releases over time (Disney+)")
+
+```
+
+Exploring the distribution of movie run-time
+```{r}
+# Exploring the distribution of movie run-time
+  data %>% ggplot(aes(x=Runtime)) + 
+           geom_histogram(bins=45, color="blanchedalmond", fill="darkolivegreen4")+
+           labs(x="Runtime (minutes)", y="Frequency", 
+                title="Distribution of movie run-times") 
+```
+
+## Text Analysis
+
+Because we want to be able to examine country-specific phenomena in the data, we need to change how our `Country` variable is organized. The variable originally contains several countries within a single cell, with country names separated by a comma. Below, we split the column into several country columns, then tidy the data by creating a single country column that contains one country observation per cell.
+
+```{r}
+# String processing for Country 
+  data <- data %>%
+  #Using the 'separate' function so each country is in its own column
+          separate(Country, c("Country 1", "Country 2", "Country 3", "Country 4",
+                              "Country 5", "Country 6", "Country 7", "Country 8",
+                              "Country 9", "Country 10", "Country 11", "Country 12",
+                              "Country 13", "Country 14", "Country 15"), sep=",",
+                              remove=TRUE, extra="merge") %>% 
+  #Using pivot_longer (instead of gather) to create one column for countries wherein     there's only one observation per cell
+          pivot_longer(c(`Country 1`, `Country 2`, `Country 3`, `Country 4`, 
+                         `Country 5`, `Country 6`, `Country 7`, `Country 8`, 
+                         `Country 10`, `Country 11`, `Country 12`, 
+                         `Country 13`, `Country 14`, `Country 15`),
+                      names_to="country_num", values_to="countries", 
+                      values_drop_na=TRUE) #dropping rows with NA values in new column
+```
+
+We find the same issue with `Genre` and `Language`, so we process these the same way we did for Country above:
+
+```{r}
+# String processing for Genre
+  data <- data %>%
+ #Using separate function so each genre is in it's own column
+          separate(Genres, c("Genre 1", "Genre 2", "Genre 3", "Genre 4", "Genre 5",
+                             "Genre 6", "Genre 7", "Genre 8", "Genre 9"), sep=",",
+                             remove=TRUE, extra="merge") %>%
+ #Using pivot_longer to create one column for genres with only 1 observation per cell
+          pivot_longer(c(`Genre 1`, `Genre 2`, `Genre 3`, `Genre 4`, `Genre 5`, 
+                         `Genre 6`, `Genre 7`, `Genre 8`, `Genre 9`),
+                       names_to="genre_num", values_to="genres", 
+                       values_drop_na=TRUE) #dropping NA values
+```
+
+```{r}
+# String processing for Language
+  data <- data %>%
+  #Using separate function so each language is in its own column
+          separate(Language, c("Language 1", "Language 2", "Language 3", "Language 4",
+                             "Language 5", "Language 6", "Language 7", "Language 8",
+                             "Language 9", "Language 10", "Language 11", 
+                             "Language 12", "Language 13", "Language 14"), sep=",",
+                             remove=TRUE, extra="merge") %>%
+ #Using pivot_longer to create one languages column with only 1 observation per cell
+          pivot_longer(c(`Language 1`, `Language 2`, `Language 3`, `Language 4`,
+                         `Language 5`, `Language 6`, `Language 7`, `Language 8`,
+                         `Language 9`, `Language 10`, `Language 11`, `Language 12`,
+                         `Language 13`, `Language 14`), names_to = "lang_num",
+                       values_to = "languages", values_drop_na=TRUE) #dropping NAs
+```
+
+Since we may want to explore trends and distributions in ratings, we want both of the ratings variables to be numeric, so we must drop the "/10" and "/100" from each string:
+```{r}
+# IMDb ratings
+  #Start by separating the rating into two columns (numerator and denominator), then     drop the denominator column
+   data <- data %>% 
+           separate(IMDb, c("IMDb", "IMDb_denom"), sep="/", remove=TRUE) %>%
+           subset(select= -IMDb_denom)
+  #Convert new IMDb from character to numeric
+   data$IMDb <- as.numeric(data$IMDb)
+
+# Rotten Tomatoes ratings
+  #Start by separating the rating into two columns (numerator and denominator), then     drop the denominator column
+   data <- data %>% 
+           separate(`Rotten.Tomatoes`, c("rotten_tom", "tom_denom"), sep="/",
+                     remove=TRUE) %>% subset(select= -tom_denom)
+ #Convert new Rotten Tomatoes rating from character to numeric
+  data$rotten_tom <- as.numeric(data$rotten_tom)
+ 
+```
+
+Some movies are available on more than one streaming platform. Since this may be of interest, we want to create a variable that lets us know how many platforms the movie is available on: 
+```{r}
+# Create a new 'platforms' variable
+  data$platforms <- rowSums(data[, c("Netflix", "Hulu", "Prime.Video", "Disney.")])
+
+```
+
+Now that our data are clean and formatted, we'll export the df as a csv to share with group members: 
+```{r}
+  
+write.csv(data, "cleaned_data.csv")
+
+```
+
+
+## Machine Learning
+
+Here we will build models to predict the outcome, ratings on Rotten Tomatoes. But first, we will perform some more data wrangling to prepare the data set for machine learning analyses.
+
+First we will convert all categorical variables into factors (and not numeric)
+
+```{r}
+lapply(data, class)
+
+data <- data %>% mutate(title = as.factor(Title),
+                        countries = as.factor(countries),
+                        genres = as.factor(genres),
+                        languages = as.factor(languages),
+                        platforms = as.factor(platforms)) %>%
+                select(-"Country 9") %>%
+                drop_na()
+
+lapply(data, class)
+```
+
+Then we will create a new data frame called `new_df`with reshaped data.
+
+```{r}
+
+new_df <- data %>%
+          group_by(title) %>%
+          summarize(genres = n_distinct(genres),
+                    countries = n_distinct(countries),
+                    languages = n_distinct(languages),
+                    runtime = Runtime[1],
+                    ratings = rotten_tom[1],
+                    platforms = n_distinct(platforms),
+                    year = Year[1]) 
+            
+
+head(new_df)
+```
+
+
+Now, we will create training and test sets using a 70% training, 30% test set split. 
+We will use the function, `stratified`, from the `splitstackshape` package to split the data. The `stratified` function samples the same percent of individuals from each class - in this case, `ratings`. 
+Note: We are including `set.seed(1)` so we get the same train/test split and model predictions we do.  
+
+```{r}
+# Rotten Tomatoes Training and Test Sets
+  set.seed(1)
+  x <- stratified(new_df, "ratings", 0.7, keep.rownames = TRUE)
+  train_set <- x %>% dplyr::select(-rn)
+  train_index <- as.numeric(x$rn)
+  test_set <- new_df[-train_index,]
+
+  dim(train_set)
+  dim(test_set)
+
+```
+
+# Random Forest Model
+Using the `randomForest` function, we fit a Random Forest model to the training set that predicts `ratings` based on the following predictors:
+-`genres`
+-`countries`
+-`languages`
+-`runtime`
+-`platforms`
+-`year`
+
+
+```{r}
+set.seed(1)
+
+# Fit the Random Forest model based on the selected predictors
+  rf_fit <- randomForest(ratings ~ genres + countries + languages + runtime +
+                           platforms + year, data = train_set, mtry=5)
+
+  # Find the predicted ratings from model
+  y_hat_rf = predict(rf_fit, newdata = test_set)
+  
+```
+
+Gini Index
+Calculating variable importance using Gini index for the random forest model. 
+*Based on this, run-time seems to be the most important predictor of rotten tomato ratings followed by year, genre, language, country, and platforms its available on. *
+```{r}
+
+variable_importance = importance(rf_fit)
+
+variable_importance_survival =
+
+  tibble(varb = rownames(variable_importance),
+
+             Gini = variable_importance[,1])
+
+variable_importance_survival %>%
+
+  arrange(desc(Gini)) %>% head(8)
+```
+
