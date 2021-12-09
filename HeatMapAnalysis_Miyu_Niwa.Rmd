@@ -1,0 +1,275 @@
+---
+title: "Map_Analysis"
+author: "Miyu Niwa"
+date: "12/1/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+rm(list = ls())
+
+
+library(dplyr)
+library(stringr)
+library(maps)
+library(ggplot2)
+library(tidyr)
+
+```
+
+## R Markdown
+
+This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
+
+When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
+
+
+# Loading Data - Common dataset from Kaggle (https://www.kaggle.com/ruchi798/movies-on-netflix-prime-video-hulu-and-disney) 
+
+```{r cars}
+
+data<- read.csv("/Users/miyuniwa/Desktop/cleaned_data.csv")
+
+```
+
+Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
+
+## Creating individual data frames for each streaming platform 
+
+```{r}
+
+hulu <- data %>% 
+  filter(Hulu == 1)
+
+netflix <- data %>% 
+  filter(Netflix == 1) 
+
+disney <- data %>% 
+  filter(`Disney.` == 1)
+
+prime <- data %>% 
+  filter(`Prime.Video`== 1)
+
+```
+
+# Basic exploratory analysis on the genres and countries of the data for each streaming platform 
+
+*Hulu* 
+* 23 Genres total 
+* Top Genres: 
+    * Drama (1328)
+    * Thriller (747)
+    * Comedy (664)
+    * Action (570)
+    * Adventure (472)
+
+
+*Netlfix*
+* 27 Genres total 
+* Top Genres: 
+    * Drama (3596)
+    * Comedy (2286)
+    * Thriller (1705)
+    * Action (1529)
+    * Romance 
+
+                  
+*Disney+*
+* 26 Genres total 
+* Top Genres: 
+    * Family (1063)
+    * Comedy (755)  
+    * Adventure (743)
+    * Animation (537)
+    * Fantasy   (535)    
+* 89 Countries total 
+ 
+              
+*Amazon Prime*
+* 27 Genres total 
+* Top Genres: 
+    * Drama(3718)
+    * Comedy (1985)
+    * Thriller (1953)
+    * Action (1953)
+    * Romance (1663) 
+* 48 Countries total 
+
+```{r pressure, echo=FALSE}
+length(unique(data$genres))
+
+sort(table(data$genres), decreasing=T)
+
+```
+
+```{r pressure, echo=FALSE}
+length(unique(hulu$genres))
+length(unique(netflix$genres))
+length(unique(disney$genres))
+length(unique(prime$genres))
+
+
+sort(table(hulu$genres), decreasing=T)
+sort(table(netflix$genres), decreasing=T)
+sort(table(disney$genres), decreasing=T)
+sort(table(prime$genres), decreasing=T)
+
+```
+
+
+```{r pressure, echo=FALSE}
+length(unique(hulu$countries))
+length(unique(netflix$countries))
+length(unique(disney$countries))
+length(unique(prime$countries))
+
+
+```
+
+# Creating a new data frame for each streaming platform with the countries included and their most frequent genres (Mode). Because R does not have a built in code for R in the base package, we use a for-loop function for determining the mode. Note: The data frames are long-format, and there may be multiple modes per country. 
+
+```{r}
+
+# function for calculating mode
+
+calc.mode <- function(i){
+  uniq_i <- unique(i)
+  tab_i <- tabulate(match(i, uniq_i))
+   uniq_i[tab_i== max(tab_i)]
+}
+
+# applying mode function to each platform 
+
+hulu_mode <- hulu %>% 
+  group_by(countries) %>% 
+  summarize(genre_most = calc.mode(genres), 
+            movie_no = length(unique(Title))) %>% 
+    mutate(number = row_number()) 
+
+netflix_mode <- netflix %>% 
+  group_by(countries) %>% 
+  summarize(genre_most = calc.mode(genres), 
+            movie_no = length(unique(Title))) %>% 
+    mutate(number = row_number()) 
+
+disney_mode<- disney %>% 
+  group_by(countries) %>%   
+ summarize(genre_most = calc.mode(genres), 
+            movie_no = length(unique(Title))) %>% 
+    mutate(number = row_number()) 
+
+prime_mode <- prime %>% 
+  group_by(countries) %>%
+  summarize(genre_most = calc.mode(genres), 
+            movie_no = length(unique(Title))) %>% 
+    mutate(number = row_number()) 
+
+
+```
+
+# Reshaping the long format data frame into wide, then combining the character columns together into one single "genre" variable. Then, I filter out for only the countries with 5 or more movies because those are the countries relevant for our next step. Lastly, I take each of the filtered dataframes and combine them into one dataframe usign the rbind() function. 
+
+```{r}
+netflix_new <- netflix_mode %>% 
+   spread(number, genre_most) %>% 
+  rename(country = countries,
+        genre_1 = `1`, 
+         genre_2 = `2`, 
+         genre_3 = `3`, 
+         genre_4 = `4`, 
+         genre_5 = `5`, 
+         genre_6 = `6`) %>% 
+  mutate(genre = paste(na.omit(c(genre_1, genre_2, genre_3, genre_4,genre_5, genre_6)), sep = " ", collapse = " "), 
+         platform = "Neflix") %>% 
+  filter(movie_no >= 5)
+         
+
+hulu_new <- hulu_mode %>% 
+   spread(number, genre_most)%>%
+  rename(country = countries,
+        genre_1 = `1`,
+         genre_2 = `2`,
+         genre_3 = `3`,
+         genre_4 = `4`,
+         genre_5 = `5`,
+         genre_6 = `6`) %>%
+  mutate(genre = paste(na.omit(c(genre_1, genre_2, genre_3, genre_4,genre_5, genre_6)), sep = " ", collapse = " "), 
+         platform = "Hulu")%>% 
+  filter(movie_no >= 5)
+
+disney_new <- disney_mode %>%
+   spread(number, genre_most) %>%
+  rename(country = countries,
+        genre_1 = `1`,
+         genre_2 = `2`,
+         genre_3 = `3`,
+         genre_4 = `4`,
+         genre_5 = `5`,
+         genre_6 = `6`,
+        genre_7 = `7`,
+          genre_8 = `8`) %>%
+  mutate(genre = paste(na.omit(c(genre_1, genre_2, genre_3, genre_4,genre_5, genre_6, genre_7, genre_8)), sep = " ", collapse = " "), 
+         platform = "Disney+")%>% 
+  filter(movie_no >= 5)
+
+prime_new <- prime_mode %>%
+   spread(number, genre_most)%>%
+  rename(country = countries,
+        genre_1 = `1`,
+         genre_2 = `2`,
+         genre_3 = `3`,
+         genre_4 = `4`) %>%
+  mutate(genre = paste(na.omit(c(genre_1, genre_2, genre_3, genre_4)), sep = " ", collapse = " "), 
+         platform = "Prime Video")%>% 
+  filter(movie_no >= 5)
+
+# Combining the four platform dataframes together into one 
+
+merged <- rbind(netflix_new, hulu_new, disney_new, prime_new)
+
+```
+
+
+# Checking & renaming country names to make sure merge will happen bewteen the world map dataframe and the movie dataframe 
+
+```{R}
+
+# Pull out world map data frame
+world_map = map_data("world") %>% 
+  rename('country' = 'region')
+
+# change country names to be consistent with the movie data, including changing China into Hong Kong where the subregion is "Hong Kong" 
+
+world_map$country[world_map$subregion == "Hong Kong"] <- "Hong Kong"
+world_map$country[world_map$country == "USA"] <- "United States"
+world_map$country[world_map$country == "UK"] <- "United Kingdom"
+world_map$country[world_map$country == "Czech Republic"] <- "Czech"
+
+# merge world map and movie data 
+world_movie  <- left_join(merged, world_map,by="country")
+
+
+```
+
+
+# Map visualization for all four platforms presenting the genre(s) most frequently occuring within a country with 5+ movies listed. 
+
+## Quick visual analysis: Disney+ has a lot more family / adventure movies, and we can see that through the more pink-like colors; China seems to have a lot of Action movies throughout most platforms; Netflix holds the most variety in terms of most common genres across the globe
+
+```{r}
+map <- world_movie %>% ggplot(aes(x = long, y = lat, group = group, fill = genre)) +
+   geom_polygon(color = "black", size = 0.1) + 
+  facet_wrap(~ platform, ncol = 2) + 
+   theme(panel.grid.major = element_blank(), 
+         panel.background = element_blank(),
+         axis.title = element_blank(), 
+         axis.text = element_blank(),
+         axis.ticks = element_blank()) + 
+  ggtitle("Most common genre(s) in countries with 5+ movies") + 
+  labs(fill = "Genre(s)"); map 
+
+
+```
+
+
