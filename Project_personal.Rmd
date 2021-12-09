@@ -1,0 +1,216 @@
+---
+title: "Project_personal"
+author: "Lisette Martinez"
+date: "11/27/2021"
+output: html_document
+---
+
+## Loading and examining the Dataset
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(dplyr)
+library(ggplot2)
+library(tidyverse)
+library(stringr)
+library(shiny)
+
+data <- read_csv("MoviesOnStreamingPlatforms_updated.csv")
+```
+
+
+```{r}
+head(data)
+```
+**Our dataset consists of the following variables:**
+
+  * Title: character variable of movie title
+  * Year: Release year of the film
+  * Age: Intended age group for the movie's audience (ex: 17+ means 17 year olds are the youngest target audience)
+  * IMDb: IMDb rating for the movie, out of a scale of 10
+  * Rotten Tomatoes: Rotten Tomatoes rating for the movie, out of a scale of 100
+  * Netflix, Hulu, Prime Video, Disney+: Indicator variables that inform us about which platform the movie is found on
+  * Directors: character variable listing the movie director(s)
+  * Genres: character variable listing the movie genres
+  * Country: character variable indicating which countries the movie is available on for the respective streaming platform
+  * Language: character variable listing the languages in which the movie is available on the streaming platform
+  * Runtime: numeric variable providing movie runtime in minutes
+
+
+```{r}
+lapply(data, class)
+```
+
+We'd like to know the distribution of movie run times, so we create the graph below: 
+```{r}
+#plotting run time
+data %>%
+  ggplot(aes(x=Runtime)) + geom_histogram(bins=45, color="blanchedalmond", fill="darkolivegreen4") + labs(x="Runtime (minutes)", y="Frequency", title="Distribution of Movie Runtimes")
+```
+
+## Data cleaning
+
+We find that several of the variables in the data set need to be manipulated in order to run our analyses of interest.
+
+Because we want to be able to examine country-specific phenomena in the data, we need to change how our `Country` variable is organized. The variable originally contains several countries within a single cell, with country names separated by a comma. Below, we split the column into several country columns, then tidy the data by creating a single country column that contains one country observation per cell.
+```{r}
+#string processing for country 
+  #first, using separate function so each country is in it's own column
+  #then, using pivot_longer (instead of gather) to create one column for countries wherein there's only one observation per cell, and dropping rows with NA values in new `countries` column
+data <- data %>%
+  separate(Country, c("Country 1", "Country 2", "Country 3", "Country 4", "Country 5", "Country 6", "Country 7", "Country 8", "Country 9", "Country 10", "Country 11", "Country 12", "Country 13", "Country 14", "Country 15"), sep=",", remove=TRUE, extra="merge") %>% 
+  pivot_longer(c(`Country 1`, `Country 2`, `Country 3`, `Country 4`, `Country 5`, `Country 6`, `Country 7`, `Country 8`, `Country 9`, `Country 10`, `Country 11`, `Country 12`, `Country 13`, `Country 14`, `Country 15`), names_to="country_num", values_to="countries", values_drop_na=TRUE)
+```
+
+We find the same issue with `Genre` and `Language`, so we process these the same way we did for Country above:
+```{r}
+#string processing for Genre
+  #first, using separate function so each genre is in it's own column
+  #then, using pivot_longer (instead of gather) to create one column for genres wherein there's only one observation per cell, and dropping NA values from new `genres` column
+data <- data %>%
+  separate(Genres, c("Genre 1", "Genre 2", "Genre 3", "Genre 4", "Genre 5", "Genre 6", "Genre 7", "Genre 8", "Genre 9"), sep=",", remove=TRUE, extra="merge") %>%
+  pivot_longer(c(`Genre 1`, `Genre 2`, `Genre 3`, `Genre 4`, `Genre 5`, `Genre 6`, `Genre 7`, `Genre 8`, `Genre 9`), names_to="genre_num", values_to="genres", values_drop_na=TRUE)
+```
+
+```{r}
+#string processing for Language
+  #first, using separate function so each language is in it's own column
+  #then, using pivot_longer (instead of gather) to create one column for languages wherein there's only one observation per cell, and dropping NA values from new `languages` column
+data <- data %>%
+  separate(Language, c("Language 1", "Language 2", "Language 3", "Language 4", "Language 5", "Language 6", "Language 7", "Language 8", "Language 9", "Language 10", "Language 11", "Language 12", "Language 13", "Language 14"), sep=",", remove=TRUE, extra="merge") %>%
+  pivot_longer(c(`Language 1`, `Language 2`, `Language 3`, `Language 4`, `Language 5`, `Language 6`, `Language 7`, `Language 8`, `Language 9`, `Language 10`, `Language 11`, `Language 12`, `Language 13`, `Language 14`), names_to = "lang_number", values_to = "languages", values_drop_na=TRUE) 
+```
+
+Since we may want to explore trends and distributions in ratings, we want both of the ratings variables to be *numeric*, so we must drop the "/10" and "/100" from each string:
+```{r}
+##start by separating the rating into two columns (numerator and denominator), then drop the denominator column
+#IMDb ratings, then convert new IMDb from character to numeric
+data <- data %>% 
+  separate(IMDb, c("IMDb", "IMDb_denom"), sep="/", remove=TRUE) %>% subset(select= -IMDb_denom)
+
+data$IMDb <- as.numeric(data$IMDb)
+
+#Rotten Tomatoes ratings, then convert new Rotten Tomatoes rating from character to numeric
+data <- data %>% 
+  separate(`Rotten Tomatoes`, c("rotten_tom", "tom_denom"), sep="/", remove=TRUE) %>% subset(select= -tom_denom)
+
+data$rotten_tom <- as.numeric(data$rotten_tom)
+```
+
+Some movies are available on more than one streaming platform. Since this may be of interest, we want to create a variable that lets us know how many platforms the movie is available on: 
+```{r}
+data$platforms <- rowSums(data[, c("Netflix", "Hulu", "Prime Video", "Disney+")])
+```
+
+Now that our data are clean and formatted, we'll export the df as a csv to share with group members: 
+```{r}
+write_csv(data, "cleaned_data.csv")
+```
+
+
+## Shiny app
+
+We decide we want to create a shiny app that can help us visualize distributions for movie ratings and examine trends in the data over time. With this in mind, we've made a shiny app with two tabs. 
+
+Our first tab shows rating distributions by movie genre and allows the user to select what type of rating they'd like to see plotted (IMDb vs Rotten Tomatoes). Through these plots, we find that the general trends in ratings by genre are similar between the two rating types. However, we do see that Rotten Tomatoes ratings have a larger spread than IMDb ratings. This could be due to the different scales for the two ratings, IMDb ratings are out of 10, while Rotten Tomatoes ratings are out of 100.
+
+The second tab of our shiny app allows the user to explore trends in IMDb ratings by the movies' intended age groups over time. Here, the user can select the movie release year they'd like to see, or they can hit the `play` icon and watch the graph go through all years from 1968 to 2021. In making this part of the app, we found that, although the dataset contains movies with a release year as early as 1914, many movies did not begin identifying intended age groups until the late 1960s and early 1970s. We see that there is no stable trend in rating distribution by age group over time, but rather the ratings by age group vary considerably as movie release years change.
+
+Our shiny code is shown below: 
+```{r}
+ui <- fluidPage(
+    theme = shinythemes::shinytheme("slate"),
+    titlePanel("Movies on Streaming Platforms"),
+    
+    tabsetPanel(
+        tabPanel("Ratings by Genre", 
+                 #sidebar
+                 sidebarLayout(
+                     
+                     #sidebarPanel 
+                     sidebarPanel(
+                         
+                         p("The boxplots generated here are created with the Movies on Streaming Platforms Dataset,
+                           obtained on", a("Kaggle.", href="https://www.kaggle.com/ruchi798/movies-on-netflix-prime-video-hulu-and-disney"),
+                           "These data contain information on movies available on streaming platforms in the United States,
+                           and availability of these U.S. movies in other countries. The data contain ratings scraped from the 
+                           IMDb and Rotten Tomatoes websites. Use the dropdown below to examine IMDb or Rotten Tomatoes ratings
+                           for the different genres in the data.", strong("Note"), ": a single movie can be listed under multiple genres in the data."
+                             
+                         ),
+                         
+                         br(),
+                         
+                         # Dropdown menu that allows the user to choose rating type
+                         selectInput(inputId = "rating", label = "Choose a Rating Type",
+                                     choices = c(IMDb ="IMDb", `Rotten Tomatoes`="rotten_tom")),
+                     ),
+                     
+                     # Main panel
+                     mainPanel( 
+                         
+                         # Plot
+                         plotOutput("boxplot")))),
+        
+        tabPanel("Ratings by Year and Target Audience Age",
+                 sidebarLayout(
+                     
+                     sidebarPanel(
+                         
+                         p("The boxplots generated here are created with the Movies on Streaming Platforms Dataset,
+                           obtained on", a("Kaggle.", href="https://www.kaggle.com/ruchi798/movies-on-netflix-prime-video-hulu-and-disney"),
+                           "These boxplots are grouped by the intended age group
+                           for the movie's audience (ex: 17+ indicates the movie was intended for viewers 17 years and older).
+                           Use the slider below to examine the boxplots of IMDb ratings by movie release year.",
+                           strong("Note"), ": the dataset contains movies with release years as old as 1914, but the data on intended age group 
+                           are sparse up until the late 1960s."
+                             
+                         ),
+                         
+                         br(),
+                         
+                         sliderInput("year", "Movie Release Year:",
+                                     min = 1968, max = 2021,
+                                     value = 1968, 
+                                     step = 1,
+                                     sep = "",       
+                                     ticks = FALSE,  
+                                     animate = TRUE)
+                     ),
+                     
+                     mainPanel(
+                         plotOutput("boxplot2")
+                     )
+                 )
+        )
+    )
+)
+
+
+server <- function(input, output) {
+    output$boxplot = renderPlot({
+        data %>% 
+            select(input$rating, genres) %>%
+            ggplot(aes_string(x = "genres", y = input$rating, group="genres")) + 
+            geom_boxplot() +
+            scale_y_continuous() + 
+            theme(axis.text.x = element_text(angle = 90, hjust = 1)) +
+            xlab("Genre") +
+            ylab("Ratings") + labs(title="Movie Ratings by Genre")
+    })
+    
+    output$boxplot2 = renderPlot({
+        data %>% 
+            filter(Year %in% input$year & !is.na(Age)) %>%
+            select(IMDb, Age) %>% 
+        ggplot(aes(x=Age, y=IMDb, group=Age)) +
+            geom_boxplot() + 
+            xlab("Intended Age Group") + 
+            ylab("IMDb Ratings") +
+            labs(title="Movie Ratings by Target Audience Age, for Selected Release Year")
+    })
+}
+
+
+```
+
