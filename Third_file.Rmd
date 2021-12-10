@@ -1,0 +1,159 @@
+---
+title: "Project_personal"
+author: "Sarah Taha"
+date: "12/05/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(dplyr)
+library(ggplot2)
+library(tidyverse)
+library(stringr)
+library(splitstackshape)
+library(randomForest)
+library(caret)
+library(e1071)
+library(pROC)
+```
+
+## Loading the Dataset
+
+```{r}
+data <- read_csv("cleaned_data.csv")
+head(data)
+```
+
+## Data Exploration
+
+```{r}
+lapply(data, class)
+```
+
+We will be exploring the data through various graphs to visually understand the data and spot any trends and patterns. Our data is focused on movies that are presented on Amazon prime, Hulu, Netflix, and Disney+. Our Dataset consists of the following variables: 
+
+  * Title: character variable of movie title
+  * Year: Release year of the film
+  * Age: Intended age group for the movie's audience (ex: 17+ means 17 year olds are the youngest target audience)
+  * IMDb: IMDb rating for the movie, out of a scale of 10
+  * Rotten Tomatoes: Rotten Tomatoes rating for the movie, out of a scale of 100
+  * Netflix, Hulu, Prime Video, Disney+: Indicator variables that inform us about which platform the movie is found on
+  * Directors: character variable listing the movie director(s)
+  * Genres: character variable listing the movie genres
+  * Country: character variable indicating which countries the movie is available on for the respective streaming platform
+  * Language: character variable listing the languages in which the movie is available on the streaming platform
+  * Runtime: numeric variable providing movie runtime in minutes
+
+```{r}
+#plotting histogram of movie ratings on Rotten Tomato 
+data %>%
+  ggplot(aes(x=rotten_tom)) + geom_histogram(bins=45, color="blanchedalmond", fill="darkolivegreen4") + labs(x="Rotten tomato ratings", y="Frequency", title="Distribution of Movie Ratings on Rotten Tomato")
+```
+**Based on the histogram above, it is apparent that there is a variation in the ratings of movies on rotten tomatos. This variation is from 25% to about 95%. However, most of the ratings of movies on Rotten Tomato are clustered around 50% to 70%. Movie Ratings that are below 25% are very few movies and are different and do not follow the general trend of ratings.** 
+
+```{r}
+#plotting a histogram of movie run time 
+data %>%
+  ggplot(aes(x=Runtime)) + geom_histogram(bins=45, color="blanchedalmond", fill="darkolivegreen4") + labs(x="Runtime of movies", y="Frequency", title="Runtime of Movies on Rotten Tomato")
+
+```
+**Based on the histogram above, it is apparent that there are no movies longer than 200 minutes of runtime. With the majority of movies having a runtime between 100-150 minutes.**
+
+```{r}
+#Plotting the year that a movie was released and the rotten tomato rating it received 
+data %>%
+  ggplot(aes(x= Year, y=rotten_tom)) + 
+  geom_point()+
+  xlab("Year") +
+  ylab("Rotten Tomato Rating")+
+  ggtitle("Year and Rotten Tomato Ratings")
+```
+**Based on the graph above, it appears that most of the Rotten Tomato ratings are found between 2000-2025. There does not seem to be a big difference across time with ratings being higher or lower than the general trend of ratings being between 25-75%.**
+
+```{r}
+#Plotting a box plot with the Ratings on Rotten Tomato, and the year the movie was released, with each box plot representing a country 
+  data %>%
+ggplot(aes(factor(Year), rotten_tom)) + 
+  geom_boxplot(fill="lightblue1") +
+  ylab("Rotton Tomato Ratings") + xlab("Year") + ggtitle("Rotton Tomato Ratings per Year Across Different Countries")+
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))+
+  scale_x_discrete(breaks=seq(1914, 2021,5))
+```
+**The box plots above do not allow us to see country specific trends. We are able to see that with each year, there is a variation in the Rotten Tomato ratings, as seen by the median of the data increasing or decreasing, however, there is not a large difference from year to year, especially starting 1984. But before 1984, there appears to be a variation in the median, and the 25th and 75th quartile, with some years having higher medians for ratings, and higher 25th and 75th percentile ratings, while others having lower in both.**
+
+The problem with the boxplot, is that it does not allow us to see country specific trends. Therefore, we will create another graph to be able to see the country differences in ratings.
+
+```{r}
+#creating a tile plot that includes the year the movie was released, the country it was released in, and the rotten tomato rating. 
+library(RColorBrewer)
+data%>% 
+  ggplot(aes(Year, countries, fill=rotten_tom))+
+  geom_tile(color = "grey50")+
+  scale_x_continuous(expand= c(0,0))+
+  scale_fill_gradientn(colors=brewer.pal(9, "PuRd"), trans="sqrt")+
+  theme_minimal() + theme(panel.grid= element_blank())+
+  xlab("Years") +
+  ylab("Countries")+
+  ggtitle("Rotton tomato ratings per Year by Country")+
+  theme(axis.text.y=element_text(size=2.5))
+```
+**From the tile graph above, we can see that most countries have a variation in the ratings on rotten tomatoes, with the US, being the only country with the most ratings on rotten tomatoes since 1914-2021.Then, France is the country with the next most rotten tomatoes ratings starting at 1920. Generally, it appears that most highly rated movies above 50% are between 1980-2021. Further, it appears that most countries by 2000 were rating movies on rotten tomatoes. There does not seem to be an apparent trend between the ratings and the countries that the movies were released.**
+
+#Machine Learning 
+Here we will build perform a linear regression to determine if the outcome, ratings on Rotten Tomatoes, is associated with the exposure variables: movie genre, languages, runtime, countries, year movie was released, and platforms the movie is on. But first, we will perform some more data wrangling to prepare the data set for machine learning analyses.
+
+```{r}
+# We will convert all categorical variables into factors (and not numeric)
+lapply(data, class)
+data <- data %>% mutate(title = as.factor(Title),
+                        countries = as.factor(countries),
+                        genres = as.factor(genres),
+                        languages = as.factor(languages),
+                        platforms = as.factor(platforms)) %>%
+                select(-"Country 9") %>%
+                drop_na()
+lapply(data, class)
+```
+
+
+```{r}
+# We will create a new data frame called `new_df`with reshaped data.
+new_df <- data %>%
+          group_by(title) %>%
+          summarize(genres = n_distinct(genres),
+                    countries = n_distinct(countries),
+                    languages = n_distinct(languages),
+                    runtime = Runtime[1],
+                    ratings = rotten_tom[1],
+                    platforms = n_distinct(platforms),
+                    year = Year[1]) 
+            
+head(new_df)
+```
+
+= 
+```{r}
+# We will create training and test set for the outcome variable rotten_tom
+set.seed(1)
+x <- stratified(new_df, "ratings", 0.7, keep.rownames = TRUE)
+train_set <- x %>% dplyr::select(-rn)
+train_index <- as.numeric(x$rn)
+test_set <- new_df[-train_index,]
+
+dim(train_set)
+dim(test_set)
+
+```
+
+```{r}
+# we will fit a linear regression model to the training set to determine whether genres, countries, languages, run time, platforms, and year are associated with ratings on rotten tomatoes
+set.seed(1)
+fit_glm<- glm(ratings ~ genres + countries + languages + runtime + platforms + year, data = train_set)
+p_hat_glm <-predict(fit_glm, newdata= test_set, type="response")
+y_hat_glm <- factor(ifelse(p_hat_glm > 0.5,1,0))
+
+summary(fit_glm)
+```
+
+**Movie genre, movie languages available, countries showing those movies, and movie runtime are statistically significant with ratings of the movies on rotten tomatoes based on the linear regression model. In other words, movie genre, language, countries, and runtime are associated with rotten tomato ratings that were given for each movie. There was no statistical significance for platforms or year of release of the movie. As such, there is no association between the platform the movie was shown on or the year of release of the movie with ratings on rotten tomatoes.**
