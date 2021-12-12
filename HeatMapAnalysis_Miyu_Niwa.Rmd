@@ -1,0 +1,298 @@
+---
+title: "Heat Map Analysis"
+author: "Miyu Niwa"
+date: "12/1/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+rm(list = ls())
+
+
+library(dplyr)
+library(stringr)
+library(maps)
+library(ggplot2)
+library(tidyr)
+
+```
+
+This file contains the code to the final analysis, a heat map analysis of the most common genre in each country. 
+Part I contains brief exploratory data analysis. Part II contains data preparation for heat map, including a function to calculate mode. Part III contains the final map visualization. 
+
+# Loading Data
+Common dataset from Kaggle (https://www.kaggle.com/ruchi798/movies-on-netflix-prime-video-hulu-and-disney) 
+
+```{r cars}
+
+data<- read.csv("/Users/miyuniwa/Desktop/cleaned_data.csv")
+
+```
+
+# PART I - Brief exploratory analysis 
+
+First, we create individual data frames for each streaming platform 
+
+```{r}
+
+hulu <- data %>% 
+  filter(Hulu == 1)
+
+netflix <- data %>% 
+  filter(Netflix == 1) 
+
+disney <- data %>% 
+  filter(`Disney.` == 1)
+
+prime <- data %>% 
+  filter(`Prime.Video`== 1)
+
+```
+
+Basic exploratory analysis on the genres and countries of the data for each streaming platform: 
+
+Hulu [23 Genres total, 68 countries]: 
+Top Genres: Drama (1328), Thriller (747), Comedy (664), Action (570), Adventure (472)
+
+Netflix [27 Genres total, 100 countries]
+Top Genres: Drama (3596), Comedy (2286), Thriller (1705), Action (1529), Romance (1173)
+
+Netflix [26 Genres total, 89 countries]
+Top Genres: Family (1063), Comedy (755), Adventure (743), Animation (537), Fantasy   (535)    
+
+              
+Prime Video [27 Genres total, 48 countries]
+Top Genres: Drama(3718), Comedy (1985), Thriller (1953), Action (1953), Romance (1663) 
+
+In words: We see that all four streaming services have similar number of genres represented in their movies (23-27). We also see that regardless of how many movies total each platform contains, Hulu, Prime Video, and Netlfix have Drama, Comedy, Thriller, and Action in their top four most represented genres. Disney+ is the one streaming platform with a much different composition of genres, with Family, Comedy, Animation and Fantasy as its top five genres. 
+
+```{r}
+length(unique(data$genres))
+
+sort(table(data$genres), decreasing=T)
+
+```
+
+```{r}
+length(unique(hulu$genres))
+length(unique(netflix$genres))
+length(unique(disney$genres))
+length(unique(prime$genres))
+
+
+sort(table(hulu$genres), decreasing=T)
+sort(table(netflix$genres), decreasing=T)
+sort(table(disney$genres), decreasing=T)
+sort(table(prime$genres), decreasing=T)
+
+```
+
+
+```{r}
+length(unique(hulu$countries))
+length(unique(netflix$countries))
+length(unique(disney$countries))
+length(unique(prime$countries))
+
+
+```
+
+# PART II - Data preparation
+
+Here, we are creating a new data frame for each streaming platform with countries and their most frequent genres (mode) Because R does not have a built in code for mode in the base package, we use a for-loop function for determining the mode. Note: The output is in long-format, and there may be multiple modes per country. 
+
+```{r}
+
+# function for calculating mode
+
+calc.mode <- function(i){
+  uniq_i <- unique(i)
+  tab_i <- tabulate(match(i, uniq_i))
+   uniq_i[tab_i== max(tab_i)]
+}
+
+# applying mode function to each platform 
+
+hulu_mode <- hulu %>% 
+  group_by(countries) %>% 
+  summarize(genre_most = calc.mode(genres), 
+            movie_no = length(unique(Title))) %>% 
+    mutate(number = row_number()) 
+
+netflix_mode <- netflix %>% 
+  group_by(countries) %>% 
+  summarize(genre_most = calc.mode(genres), 
+            movie_no = length(unique(Title))) %>% 
+    mutate(number = row_number()) 
+
+disney_mode<- disney %>% 
+  group_by(countries) %>%   
+ summarize(genre_most = calc.mode(genres), 
+            movie_no = length(unique(Title))) %>% 
+    mutate(number = row_number()) 
+
+prime_mode <- prime %>% 
+  group_by(countries) %>%
+  summarize(genre_most = calc.mode(genres), 
+            movie_no = length(unique(Title))) %>% 
+    mutate(number = row_number()) 
+
+
+```
+
+Next, we will reshape the long format data  into wide format, then combine the character columns together into one single "genre" variable. Then, we filter out for only the countries with 5 or more movies, as we are only interested in seeing data from the countries with enough movie data. Lastly, we take each of the filtered data frames and combine them into one data frame using the rbind() function. 
+
+```{r}
+netflix_new <- netflix_mode %>% 
+   spread(number, genre_most) %>% 
+  rename(country = countries,
+        genre_1 = `1`, 
+         genre_2 = `2`, 
+         genre_3 = `3`, 
+         genre_4 = `4`, 
+         genre_5 = `5`, 
+         genre_6 = `6`) %>% 
+  mutate(genre = paste(na.omit(c(genre_1, genre_2, genre_3, genre_4,genre_5, genre_6)), sep = " ", collapse = " "), 
+         platform = "Netflix") %>% 
+  filter(movie_no >= 5)
+         
+
+hulu_new <- hulu_mode %>% 
+   spread(number, genre_most)%>%
+  rename(country = countries,
+        genre_1 = `1`,
+         genre_2 = `2`,
+         genre_3 = `3`,
+         genre_4 = `4`,
+         genre_5 = `5`,
+         genre_6 = `6`) %>%
+  mutate(genre = paste(na.omit(c(genre_1, genre_2, genre_3, genre_4,genre_5, genre_6)), sep = " ", collapse = " "), 
+         platform = "Hulu")%>% 
+  filter(movie_no >= 5)
+
+disney_new <- disney_mode %>%
+   spread(number, genre_most) %>%
+  rename(country = countries,
+        genre_1 = `1`,
+         genre_2 = `2`,
+         genre_3 = `3`,
+         genre_4 = `4`,
+         genre_5 = `5`,
+         genre_6 = `6`,
+        genre_7 = `7`,
+          genre_8 = `8`) %>%
+  mutate(genre = paste(na.omit(c(genre_1, genre_2, genre_3, genre_4,genre_5, genre_6, genre_7, genre_8)), sep = " ", collapse = " "), 
+         platform = "Disney+")%>% 
+  filter(movie_no >= 5)
+
+prime_new <- prime_mode %>%
+   spread(number, genre_most)%>%
+  rename(country = countries,
+        genre_1 = `1`,
+         genre_2 = `2`,
+         genre_3 = `3`,
+         genre_4 = `4`) %>%
+  mutate(genre = paste(na.omit(c(genre_1, genre_2, genre_3, genre_4)), sep = " ", collapse = " "), 
+         platform = "Prime Video")%>% 
+  filter(movie_no >= 5)
+
+# Combining the four platform dataframes together into one 
+
+merged <- rbind(netflix_new, hulu_new, disney_new, prime_new)
+
+```
+
+
+We check and rename country names to make sure the merge will happen successfully between the world map data and the movie data. This renaming incudes changing 'China' into 'Hong Kong' where the subregion is Hong Kong in the world data, as the movie data has Hong Kong-specific information.  
+
+```{R}
+
+# Pull out world map data frame
+world_map = map_data("world") %>% 
+  rename('country' = 'region')
+
+# change country names to be consistent with the movie data
+
+world_map$country[world_map$subregion == "Hong Kong"] <- "Hong Kong"
+world_map$country[world_map$country == "USA"] <- "United States"
+world_map$country[world_map$country == "UK"] <- "United Kingdom"
+world_map$country[world_map$country == "Czech Republic"] <- "Czech"
+
+# merge world map and movie data 
+world_movie  <- left_join(merged, world_map,by="country")
+
+
+```
+
+
+# Part III - Map visualization 
+
+Finally, here is the map visualization for all four platforms presenting the genre(s) most frequently occurring within countries with 5+ movies listed. 
+
+In words: Disney+ has a lot more family and adventure movies, and we can see that through the more pink-like colors and the green (adventure); China seems to have a lot of Action movies throughout most platforms, which is showing the red color; Netflix holds the most variety in terms of most common genres across the globe. Hulu, Prime Video, and Netflix all seem to have Drama movies as the most common genre across most countries (blue). 
+
+```{r}
+map <- world_movie %>% ggplot(aes(x = long, y = lat, group = group, fill = genre)) +
+   geom_polygon(color = "black", size = 0.1) + 
+  facet_wrap(~ platform, ncol = 2) + 
+   theme(panel.grid.major = element_blank(), 
+         panel.background = element_blank(),
+         axis.title = element_blank(), 
+         axis.text = element_blank(),
+         axis.ticks = element_blank()) + 
+  ggtitle("Most common genre(s) in countries with 5+ movies: All Streaming Platforms") + 
+  labs(fill = "Genre(s)"); map 
+
+map <- world_movie %>% 
+  filter(platform == "Netflix") %>% 
+  ggplot(aes(x = long, y = lat, group = group, fill = genre)) +
+   geom_polygon(color = "black", size = 0.1) + 
+   theme(panel.grid.major = element_blank(), 
+         panel.background = element_blank(),
+         axis.title = element_blank(), 
+         axis.text = element_blank(),
+         axis.ticks = element_blank()) + 
+  ggtitle("Most common genre(s) in countries with 5+ movies: Netflix") + 
+  labs(fill = "Genre(s)"); map 
+
+map <- world_movie %>% 
+  filter(platform == "Hulu") %>% 
+  ggplot(aes(x = long, y = lat, group = group, fill = genre)) +
+   geom_polygon(color = "black", size = 0.1) + 
+   theme(panel.grid.major = element_blank(), 
+         panel.background = element_blank(),
+         axis.title = element_blank(), 
+         axis.text = element_blank(),
+         axis.ticks = element_blank()) + 
+  ggtitle("Most common genre(s) in countries with 5+ movies: Hulu") + 
+  labs(fill = "Genre(s)"); map 
+
+map <- world_movie %>% 
+  filter(platform == "Prime Video") %>% 
+  ggplot(aes(x = long, y = lat, group = group, fill = genre)) +
+   geom_polygon(color = "black", size = 0.1) + 
+   theme(panel.grid.major = element_blank(), 
+         panel.background = element_blank(),
+         axis.title = element_blank(), 
+         axis.text = element_blank(),
+         axis.ticks = element_blank()) + 
+  ggtitle("Most common genre(s) in countries with 5+ movies: Prime Video") + 
+  labs(fill = "Genre(s)"); map 
+
+map <- world_movie %>% 
+  filter(platform == "Disney+") %>% 
+  ggplot(aes(x = long, y = lat, group = group, fill = genre)) +
+   geom_polygon(color = "black", size = 0.1) + 
+   theme(panel.grid.major = element_blank(), 
+         panel.background = element_blank(),
+         axis.title = element_blank(), 
+         axis.text = element_blank(),
+         axis.ticks = element_blank()) + 
+  ggtitle("Most common genre(s) in countries with 5+ movies: Disney+") + 
+  labs(fill = "Genre(s)"); map 
+
+
+```
+
+
