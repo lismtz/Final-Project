@@ -1,6 +1,6 @@
 # Final-Project
 BST 260 Final Project; Fall 2021
-
+Lisette Martinez, Evelin Garcia, Miyu Niwa, Sarah Taha
 
 Welcome! This repository contains all our files for the final project assignment in BST 260. The Rmd files (and corresponding htmls) have been named in the order that they should be reviewed--from first to fourth. 
 
