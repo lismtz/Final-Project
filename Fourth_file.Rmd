@@ -26,7 +26,7 @@ Common dataset from Kaggle (https://www.kaggle.com/ruchi798/movies-on-netflix-pr
 
 ```{r cars}
 
-data<- read.csv("/Users/miyuniwa/Desktop/cleaned_data.csv")
+data<- read.csv("cleaned_data.csv")
 
 ```
 
